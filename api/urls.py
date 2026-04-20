@@ -13,4 +13,6 @@ urlpatterns = [
     path("student-reserve/<int:user_id>/<int:room_id>/", views.StudentSetScheduleView.as_view(), name="student-reserve"),
     path("all-reservations/", views.AllReservationView.as_view(), name="all-reservations"),
     path("reservation/delete/<int:id>/", views.ReservationDeleteView.as_view()),
+    
+    path("reservations/<str:course>/<str:year_lvl>/<str:section>/", views.ReservationFilterView.as_view(), name="reservation-filter"),
 ]

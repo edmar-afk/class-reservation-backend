@@ -197,3 +197,17 @@ class ReservationDeleteView(DestroyAPIView):
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
     lookup_field = "id"
+    
+    
+class ReservationFilterView(APIView):
+    permission_classes = [AllowAny]
+    
+    def get(self, request, course, year_lvl, section):
+        reservations = Reservation.objects.filter(
+            course=course,
+            year_lvl=year_lvl,
+            section=section
+        ).order_by("-reserve_date", "time_in")
+
+        serializer = ReservationSerializer(reservations, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

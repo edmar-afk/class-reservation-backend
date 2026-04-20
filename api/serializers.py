@@ -74,11 +74,19 @@ class RoomSerializer(serializers.ModelSerializer):
         
         
 class ReservationSerializer(serializers.ModelSerializer):
+    student_full_name = serializers.CharField(
+        source="student.full_name",
+        read_only=True
+    )
+
+    room = serializers.SerializerMethodField()
+
     class Meta:
         model = Reservation
         fields = [
             "id",
             "student",
+            "student_full_name",
             "room",
             "course",
             "year_lvl",
@@ -88,4 +96,9 @@ class ReservationSerializer(serializers.ModelSerializer):
             "time_in",
             "time_out",
         ]
-        read_only_fields = ["student", "room"]
+
+    def get_room(self, obj):
+        return {
+            "id": obj.room.id,
+            "name": obj.room.name
+        }
