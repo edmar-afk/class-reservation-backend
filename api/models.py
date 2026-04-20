@@ -52,9 +52,9 @@ class Reservation(models.Model):
     year_lvl = models.TextField(blank=True, null=True)
     subject = models.TextField(blank=True, null=True)
     section = models.TextField(blank=True, null=True)
-    reserve_date = models.DateField(blank=True, null=True)
-    time_in = models.DateTimeField()
-    time_out = models.DateTimeField()
+    reserve_date = models.TextField(blank=True, null=True)
+    time_in = models.TextField(blank=True, null=True)
+    time_out = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return f"{self.student.full_name} reserved {self.room.name} for {self.subject}"

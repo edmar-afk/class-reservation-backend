@@ -79,7 +79,7 @@ class ReservationSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
-    room = serializers.SerializerMethodField()
+    room = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Reservation
@@ -96,6 +96,7 @@ class ReservationSerializer(serializers.ModelSerializer):
             "time_in",
             "time_out",
         ]
+        read_only_fields = ["student", "room"]
 
     def get_room(self, obj):
         return {
