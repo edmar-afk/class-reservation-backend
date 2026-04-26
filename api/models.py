@@ -1,7 +1,16 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import FileExtensionValidator
+from django.contrib.auth import get_user_model
 
+User = get_user_model()
+
+
+class InstructorProxy(User):
+    class Meta:
+        proxy = True
+        verbose_name = "Instructor"
+        verbose_name_plural = "Instructors"
 
 
 class Instructor(models.Model):

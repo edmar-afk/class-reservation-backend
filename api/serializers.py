@@ -46,7 +46,6 @@ class StudentRegisterSerializer(serializers.ModelSerializer):
             'course',
             'section',
             'year_lvl',
-            'phone_number',
             'profile_picture'
         ]
 
