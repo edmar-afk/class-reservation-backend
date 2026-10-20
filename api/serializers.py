@@ -1,12 +1,12 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Instructor, Student, Subject, Room, Reservation
+from .models import Student, Schedule
 
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "username", "email", "first_name", "last_name", 'is_superuser']
+        fields = ["id", "username", "email", "first_name", "last_name", 'is_superuser', "is_staff"]
 
 
 class StudentSerializer(serializers.ModelSerializer):
@@ -25,14 +25,6 @@ class StudentSerializer(serializers.ModelSerializer):
             "profile_picture",
         ]
 
-class InstructorSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Instructor
-        fields = [
-            "id",
-            "profile_picture",
-        ]
-        
 class StudentRegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True)
     username = serializers.CharField(write_only=True, required=True)
@@ -66,39 +58,91 @@ class StudentRegisterSerializer(serializers.ModelSerializer):
         return student
 
 
-class RoomSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Room
-        fields = ['id', 'name']
-        
-        
-class ReservationSerializer(serializers.ModelSerializer):
-    student_full_name = serializers.CharField(
-        source="student.full_name",
-        read_only=True
+
+
+class TeacherCreateSerializer(serializers.Serializer):
+    full_name = serializers.CharField(max_length=255)
+    phone_number = serializers.CharField(max_length=20)
+    password = serializers.CharField(
+        write_only=True,
+        min_length=6
+    )
+    confirm_password = serializers.CharField(
+        write_only=True
+    )
+    profile_picture = serializers.ImageField(
+        required=False,
+        allow_null=True
     )
 
-    room = serializers.SerializerMethodField(read_only=True)
+    def validate_phone_number(self, value):
+        value = value.strip()
+
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError(
+                "A user with this phone number already exists."
+            )
+
+        return value
+
+    def validate(self, attrs):
+        password = attrs.get("password")
+        confirm_password = attrs.get("confirm_password")
+
+        if password != confirm_password:
+            raise serializers.ValidationError({
+                "confirm_password": "Passwords do not match."
+            })
+
+        return attrs
+
+    def create(self, validated_data):
+        full_name = validated_data["full_name"]
+        phone_number = validated_data["phone_number"]
+        password = validated_data["password"]
+        profile_picture = validated_data.get("profile_picture")
+
+        user = User.objects.create_user(
+            username=phone_number,
+            password=password,
+            first_name=full_name,
+            is_staff=True,       # Teacher
+            is_superuser=False,  # NOT an admin
+        )
+
+        teacher = Student.objects.create(
+            user=user,
+            full_name=full_name,
+            phone_number=phone_number,
+            course=None,
+            section=None,
+            year_lvl=None,
+            profile_picture=profile_picture,
+        )
+
+        return teacher
+    
+    
+
+
+class ScheduleSerializer(serializers.ModelSerializer):
+    instructor_name = serializers.SerializerMethodField()
 
     class Meta:
-        model = Reservation
+        model = Schedule
         fields = [
             "id",
-            "student",
-            "student_full_name",
-            "room",
+            "instructor",
+            "instructor_name",
             "course",
             "year_lvl",
-            "subject",
             "section",
-            "reserve_date",
-            "time_in",
-            "time_out",
+            "room_name",
+            "date",
+            "start_time",
+            "end_time",
         ]
-        read_only_fields = ["student", "room"]
+        read_only_fields = ["id", "instructor_name"]
 
-    def get_room(self, obj):
-        return {
-            "id": obj.room.id,
-            "name": obj.room.name
-        }
+    def get_instructor_name(self, obj):
+        return obj.instructor.get_full_name() or obj.instructor.username

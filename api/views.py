@@ -13,8 +13,8 @@ from rest_framework.generics import DestroyAPIView, RetrieveAPIView
 from django.utils.timezone import localdate
 import requests # pyright: ignore[reportMissingModuleSource]
 import threading
-from .serializers import StudentRegisterSerializer, StudentSerializer, InstructorSerializer, UserSerializer, RoomSerializer, ReservationSerializer
-from .models import Student, Instructor, Subject, Room, Reservation
+from .serializers import StudentRegisterSerializer, StudentSerializer, UserSerializer, TeacherCreateSerializer, ScheduleSerializer
+from .models import Student, Schedule
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -85,14 +85,42 @@ class StudentRegisterView(APIView):
 
 class UserProfileView(APIView):
     permission_classes = [AllowAny]
+
     def get(self, request, user_id):
         user = get_object_or_404(User, id=user_id)
 
         student = Student.objects.filter(user=user).first()
+
         return Response({
             "user": UserSerializer(user).data,
-            "student": StudentSerializer(student).data if student else None,  
+            "student": StudentSerializer(student).data if student else None,
         })
+
+    def put(self, request, user_id):
+        user = get_object_or_404(User, id=user_id)
+
+        student = Student.objects.filter(user=user).first()
+
+        if not student:
+            return Response(
+                {"detail": "Student profile not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Update full name
+        if "full_name" in request.data:
+            student.full_name = request.data.get("full_name")
+
+        # Update profile picture
+        if "profile_picture" in request.FILES:
+            student.profile_picture = request.FILES["profile_picture"]
+
+        student.save()
+
+        return Response({
+            "user": UserSerializer(user).data,
+            "student": StudentSerializer(student).data,
+        }, status=status.HTTP_200_OK)
         
         
 class StudentByUserIDView(APIView):
@@ -108,106 +136,91 @@ class StudentByUserIDView(APIView):
             )
         
 
-class RoomListView(generics.ListAPIView):
+
+class UsersView(APIView):
     permission_classes = [AllowAny]
-    queryset = Room.objects.all()
-    serializer_class = RoomSerializer
-    
 
-class StudentSetScheduleView(APIView):
+    def get(self, request):
+        students = Student.objects.select_related("user").all()
+
+        serializer = StudentSerializer(
+            students,
+            many=True,
+            context={"request": request}
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+        
+class UserDeleteView(generics.DestroyAPIView):
+    queryset = Student.objects.select_related("user").all()
     permission_classes = [AllowAny]
-    
-    def post(self, request, user_id, room_id):
-        print("=== REQUEST DEBUG ===")
-        print("USER_ID:", user_id)
-        print("ROOM_ID:", room_id)
-        print("REQUEST DATA:", request.data)
 
-        try:
-            student = Student.objects.get(user_id=user_id)
-        except Student.DoesNotExist:
-            print("ERROR: Student not found for user_id:", user_id)
-            return Response(
-                {"error": "Student profile not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+    def perform_destroy(self, instance):
+        # Delete the related Django User.
+        # Because Student.user uses on_delete=models.CASCADE,
+        # the Student will also be deleted automatically.
+        instance.user.delete()
 
-        try:
-            room = Room.objects.get(id=room_id)
-        except Room.DoesNotExist:
-            print("ERROR: Room not found for room_id:", room_id)
-            return Response(
-                {"error": "Room not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        
+        
+class TeacherCreateView(APIView):
+    permission_classes = [AllowAny]
 
-        serializer = ReservationSerializer(data=request.data)
+    def post(self, request):
+        serializer = TeacherCreateSerializer(
+            data=request.data
+        )
 
         if serializer.is_valid():
-            serializer.save(student=student, room=room)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            teacher = serializer.save()
 
-        print("=== SERIALIZER INVALID ===")
-        print(serializer.errors)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-
-
-
-class AllReservationView(APIView):
-    permission_classes = [AllowAny]
-    
-    def get(self, request):
-        reservations = Reservation.objects.select_related("student", "room").all()
-
-        data = []
-
-        for reservation in reservations:
-            data.append({
-                "id": reservation.id,
-                "student": {
-                    "id": reservation.student.id,
-                    "full_name": reservation.student.full_name,
-                    "course": reservation.student.course,
-                    "year_lvl": reservation.student.year_lvl,
-                    "phone_number": reservation.student.phone_number,
-                    "profile_picture": request.build_absolute_uri(
-                        reservation.student.profile_picture.url
-                    ) if reservation.student.profile_picture else None,
+            return Response(
+                {
+                    "success": True,
+                    "message": "Teacher created successfully.",
+                    "teacher": {
+                        "id": teacher.id,
+                        "full_name": teacher.full_name,
+                        "phone_number": teacher.phone_number,
+                        "profile_picture": (
+                            teacher.profile_picture.url
+                            if teacher.profile_picture
+                            else None
+                        ),
+                        "is_staff": teacher.user.is_staff,
+                        "is_superuser": teacher.user.is_superuser,
+                    },
                 },
-                "room": {
-                    "id": reservation.room.id,
-                    "name": reservation.room.name,
-                },
-                "course": reservation.course,
-                "year_lvl": reservation.year_lvl,
-                "subject": reservation.subject,
-                "section": reservation.section,
-                "reserve_date": reservation.reserve_date,
-                "time_in": reservation.time_in,
-                "time_out": reservation.time_out,
-            })
+                status=status.HTTP_201_CREATED,
+            )
 
-        return Response(data, status=status.HTTP_200_OK)
-    
-    
-class ReservationDeleteView(DestroyAPIView):
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+        
+        
+class ScheduleListCreateView(generics.ListCreateAPIView):
+    queryset = Schedule.objects.select_related("instructor").all().order_by(
+        "date",
+        "start_time"
+    )
+    serializer_class = ScheduleSerializer
     permission_classes = [AllowAny]
-    queryset = Reservation.objects.all()
-    serializer_class = ReservationSerializer
-    lookup_field = "id"
-    
-    
-class ReservationFilterView(APIView):
-    permission_classes = [AllowAny]
-    
-    def get(self, request, course, year_lvl, section):
-        reservations = Reservation.objects.filter(
-            course=course,
-            year_lvl=year_lvl,
-            section=section
-        ).order_by("-reserve_date", "time_in")
 
-        serializer = ReservationSerializer(reservations, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class ScheduleUpdateView(generics.UpdateAPIView):
+    queryset = Schedule.objects.select_related("instructor").all()
+    serializer_class = ScheduleSerializer
+    permission_classes = [AllowAny]
+
+    lookup_field = "pk"
+    
+    
+class ScheduleDeleteView(generics.DestroyAPIView):
+    queryset = Schedule.objects.all()
+    permission_classes = [AllowAny]
+    lookup_field = "pk"
