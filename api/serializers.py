@@ -6,7 +6,16 @@ from .models import Student, Schedule
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "username", "email", "first_name", "last_name", 'is_superuser', "is_staff"]
+        fields = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "is_superuser",
+            "is_staff",
+        ]
+        read_only_fields = ["id"]
 
 
 class StudentSerializer(serializers.ModelSerializer):
@@ -24,6 +33,27 @@ class StudentSerializer(serializers.ModelSerializer):
             "phone_number",
             "profile_picture",
         ]
+
+    def update(self, instance, validated_data):
+        # Get nested User information
+        user_data = validated_data.pop("user", None)
+
+        # Update linked Django User
+        if user_data is not None:
+            user = instance.user
+
+            for field, value in user_data.items():
+                setattr(user, field, value)
+
+            user.save()
+
+        # Update Student information
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+
+        instance.save()
+
+        return instance
 
 class StudentRegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True)

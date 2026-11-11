@@ -16,4 +16,16 @@ urlpatterns = [
     path("schedules/", views.ScheduleListCreateView.as_view(), name="schedule-list-create"),
     path("schedules/<int:pk>/", views.ScheduleUpdateView.as_view(), name="schedule-update"),
     path("schedules/<int:pk>/delete/", views.ScheduleDeleteView.as_view(),name="schedule-delete"),
+    
+    path(
+        "students/",
+        views.StudentListView.as_view(),
+        name="student-list"
+    ),
+
+    path(
+        "students/edit/<int:pk>/",
+        views.StudentDetailUpdateView.as_view(),
+        name="student-edit"
+    ),
 ]

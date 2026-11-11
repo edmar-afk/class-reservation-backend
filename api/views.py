@@ -6,7 +6,7 @@ from rest_framework import status, generics
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.shortcuts import get_object_or_404
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from datetime import date
 from django.utils import timezone
 from rest_framework.generics import DestroyAPIView, RetrieveAPIView
@@ -15,7 +15,6 @@ import requests # pyright: ignore[reportMissingModuleSource]
 import threading
 from .serializers import StudentRegisterSerializer, StudentSerializer, UserSerializer, TeacherCreateSerializer, ScheduleSerializer
 from .models import Student, Schedule
-
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
@@ -224,3 +223,107 @@ class ScheduleDeleteView(generics.DestroyAPIView):
     queryset = Schedule.objects.all()
     permission_classes = [AllowAny]
     lookup_field = "pk"
+    
+
+
+# ============================================================
+# STUDENT LIST - GET ALL STUDENTS WITH LINKED USER INFORMATION
+# ============================================================
+
+class StudentListView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        students = Student.objects.select_related("user").all().order_by("-id")
+
+        serializer = StudentSerializer(
+            students,
+            many=True,
+            context={"request": request}
+        )
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# ============================================================
+# STUDENT DETAIL - GET, UPDATE STUDENT AND LINKED USER
+# ============================================================
+
+class StudentDetailUpdateView(APIView):
+    permission_classes = [AllowAny]
+
+    parser_classes = [
+        JSONParser,
+        MultiPartParser,
+        FormParser
+    ]
+
+    def get(self, request, pk):
+        student = get_object_or_404(
+            Student.objects.select_related("user"),
+            pk=pk
+        )
+
+        serializer = StudentSerializer(
+            student,
+            context={"request": request}
+        )
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def put(self, request, pk):
+        student = get_object_or_404(
+            Student.objects.select_related("user"),
+            pk=pk
+        )
+
+        serializer = StudentSerializer(
+            student,
+            data=request.data,
+            context={"request": request}
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+
+            return Response(
+                {
+                    "message": "Student and user information updated successfully.",
+                    "student": serializer.data
+                },
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    def patch(self, request, pk):
+        student = get_object_or_404(
+            Student.objects.select_related("user"),
+            pk=pk
+        )
+
+        serializer = StudentSerializer(
+            student,
+            data=request.data,
+            partial=True,
+            context={"request": request}
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+
+            return Response(
+                {
+                    "message": "Student and user information updated successfully.",
+                    "student": serializer.data
+                },
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
